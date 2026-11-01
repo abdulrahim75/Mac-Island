@@ -31,18 +31,21 @@ body {
   border-radius: 25px;
   color: white;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   box-shadow:
     0 4px 18px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .island.expanded {
-  min-height: 150px;
+  min-height: 168px;
   border-radius: 27px;
 }
 
 .island-header {
   min-height: 38px;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -76,6 +79,11 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 0 14px;
+}
+
+.compact-content .sound-bars {
+  margin-left: auto;
+  margin-right: 10px;
 }
 
 .music-icon {
@@ -149,9 +157,128 @@ body {
 
 .island-footer {
   display: flex;
-  justify-content: space-between;
-  padding: 12px 13px 5px;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  margin-top: auto;
+  padding: 8px 13px 10px;
   font-size: 8px;
   letter-spacing: 1px;
   color: #777;
+}
+
+.island-feature-switcher {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.island-feature-switcher button {
+  min-width: 76px;
+  border: 0;
+  border-radius: 9px;
+  padding: 8px 12px;
+  background: transparent;
+  color: #aaa;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.island-feature-switcher button.active {
+  color: #111;
+  background: white;
+  box-shadow: 0 1px 6px rgba(255, 255, 255, 0.22);
+}
+
+.island-feature-switcher button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.battery-island {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 5px;
+  padding: 6px 9px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.battery-island-compact {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.battery-icon {
+  position: relative;
+  width: 24px;
+  height: 12px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 3px;
+  padding: 1px;
+  display: flex;
+  align-items: center;
+  overflow: visible;
+}
+
+.battery-icon::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  width: 3px;
+  height: 6px;
+  border-radius: 0 2px 2px 0;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.battery-icon-fill {
+  height: 100%;
+  border-radius: 1px;
+  background: #66e6a1;
+  transform-origin: left;
+}
+
+.battery-icon-low {
+  background: #ff6258;
+}
+
+.battery-icon-bolt {
+  position: absolute;
+  inset: 0;
+  color: #fff;
+  font-size: 9px;
+  line-height: 10px;
+  text-align: center;
+}
+
+.battery-percentage {
+  min-width: 31px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.battery-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  text-align: right;
+}
+
+.battery-details strong {
+  font-size: 11px;
+}
+
+.battery-details span {
+  color: #999;
+  font-size: 9px;
 }

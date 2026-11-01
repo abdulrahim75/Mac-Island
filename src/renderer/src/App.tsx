@@ -1,13 +1,61 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { BatteryIsland } from './components/BatteryIsland'
 import { MusicPlayer } from './components/MusicPlayer'
 import { SoundBars } from './components/SoundBars'
+import type { MacIslandBatteryState } from './batteryTypes'
 import './island.css'
+
+type ActiveIsland = 'music' | 'battery'
 
 function App(): React.JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const [playing, setPlaying] = useState(true)
+  const [batteryState, setBatteryState] = useState<MacIslandBatteryState | null>(null)
+  const [activeIsland, setActiveIsland] = useState<ActiveIsland>('music')
   const reduceMotion = useReducedMotion()
+  const previousBatteryState = useRef<MacIslandBatteryState | null>(null)
+
+  useEffect(() => {
+    void window.api.getBatteryState().then((state) => {
+      setBatteryState(state)
+      previousBatteryState.current = state
+
+      if (
+        state &&
+        (state.percentage < 20 ||
+          state.chargingState === 'charging' ||
+          state.chargingState === 'full')
+      ) {
+        setActiveIsland('battery')
+      }
+    })
+
+    return window.api.onBatteryUpdate((nextState) => {
+      const previousState = previousBatteryState.current
+      setBatteryState(nextState)
+      previousBatteryState.current = nextState
+
+      if (!previousState) return
+
+      const adapterChanged = previousState.adapterConnected !== nextState.adapterConnected
+      const chargingChanged = previousState.chargingState !== nextState.chargingState
+      const crossedLowThreshold =
+        (previousState.percentage >= 20 && nextState.percentage < 20) ||
+        (previousState.percentage < 20 && nextState.percentage >= 20)
+      const crossedBatteryThreshold = [20, 50, 80].some(
+        (threshold) =>
+          (previousState.percentage >= threshold && nextState.percentage < threshold) ||
+          (previousState.percentage < threshold && nextState.percentage >= threshold)
+      )
+
+      if (adapterChanged || chargingChanged || crossedLowThreshold || crossedBatteryThreshold) {
+        setActiveIsland('battery')
+        setExpanded(true)
+        void window.api.setExpanded(true)
+      }
+    })
+  }, [])
 
   const toggleIsland = async (): Promise<void> => {
     const nextState = !expanded
@@ -16,12 +64,16 @@ function App(): React.JSX.Element {
     await window.api.setExpanded(nextState)
   }
 
+  const selectIsland = (island: ActiveIsland): void => {
+    setActiveIsland(island)
+  }
+
   return (
     <main className="island-container">
       <motion.section
         className={`island ${expanded ? 'expanded' : ''}`}
         animate={{
-          minHeight: expanded ? 150 : 48,
+          minHeight: expanded ? 168 : 48,
           borderRadius: expanded ? 27 : 25
         }}
         transition={
@@ -45,8 +97,14 @@ function App(): React.JSX.Element {
                 exit={{ opacity: 0, scale: 0.94 }}
                 transition={{ duration: reduceMotion ? 0 : 0.16 }}
               >
-                <span className="music-icon">♫</span>
-                <SoundBars playing={playing} />
+                {activeIsland === 'music' ? (
+                  <>
+                    <span className="music-icon">♫</span>
+                    <SoundBars playing={playing} />
+                  </>
+                ) : (
+                  <BatteryIsland state={batteryState} compact />
+                )}
               </motion.div>
             ) : (
               <motion.div
@@ -56,7 +114,14 @@ function App(): React.JSX.Element {
                 exit={{ opacity: 0 }}
                 transition={{ duration: reduceMotion ? 0 : 0.14 }}
               >
-                <MusicPlayer playing={playing} onToggle={() => setPlaying((current) => !current)} />
+                {activeIsland === 'music' ? (
+                  <MusicPlayer
+                    playing={playing}
+                    onToggle={() => setPlaying((current) => !current)}
+                  />
+                ) : (
+                  <BatteryIsland state={batteryState} />
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -75,8 +140,33 @@ function App(): React.JSX.Element {
                   : { type: 'spring', stiffness: 260, damping: 24, delay: 0.08 }
               }
             >
-              <span>MAC ISLAND</span>
-              <span>YOUR MAC, YOUR WAY.</span>
+              <div className="island-feature-switcher">
+                <button
+                  type="button"
+                  className={activeIsland === 'music' ? 'active' : ''}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    selectIsland('music')
+                  }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  aria-pressed={activeIsland === 'music'}
+                >
+                  Music
+                </button>
+                <button
+                  type="button"
+                  className={activeIsland === 'battery' ? 'active' : ''}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    selectIsland('battery')
+                  }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  aria-pressed={activeIsland === 'battery'}
+                  disabled={!batteryState}
+                >
+                  Battery
+                </button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
