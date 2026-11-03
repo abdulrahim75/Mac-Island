@@ -5,6 +5,8 @@ export interface MacIslandSettings {
   clipboardEnabled: boolean
   clipboardHistorySize: number
   clipboardPaused: boolean
+  fileEnabled: boolean
+  fileShelfSize: number
   automaticExpansion: boolean
   lowBatteryAlerts: boolean
   animationsEnabled: boolean

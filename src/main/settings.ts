@@ -9,6 +9,8 @@ export interface MacIslandSettings {
   clipboardEnabled: boolean
   clipboardHistorySize: number
   clipboardPaused: boolean
+  fileEnabled: boolean
+  fileShelfSize: number
   automaticExpansion: boolean
   lowBatteryAlerts: boolean
   animationsEnabled: boolean
@@ -22,6 +24,8 @@ export const defaultSettings: MacIslandSettings = {
   clipboardEnabled: false,
   clipboardHistorySize: 50,
   clipboardPaused: false,
+  fileEnabled: false,
+  fileShelfSize: 20,
   automaticExpansion: true,
   lowBatteryAlerts: true,
   animationsEnabled: true,
@@ -78,6 +82,8 @@ export class SettingsStore {
       clipboardEnabled: Boolean(value.clipboardEnabled),
       clipboardHistorySize: Math.max(1, Math.min(50, Number(value.clipboardHistorySize) || 50)),
       clipboardPaused: Boolean(value.clipboardPaused),
+      fileEnabled: Boolean(value.fileEnabled),
+      fileShelfSize: Math.max(1, Math.min(50, Number(value.fileShelfSize) || 20)),
       automaticExpansion: Boolean(value.automaticExpansion),
       lowBatteryAlerts: Boolean(value.lowBatteryAlerts),
       animationsEnabled: Boolean(value.animationsEnabled),

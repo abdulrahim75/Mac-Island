@@ -9,6 +9,12 @@ interface MacIslandAPI {
   copyClipboardItem: (id: string) => Promise<void>
   deleteClipboardItem: (id: string) => Promise<void>
   clearClipboardHistory: () => Promise<void>
+  addFilesToShelf: (files: FileList | File[]) => Promise<MacIslandFileItem[]>
+  getFileShelf: () => Promise<MacIslandFileItem[]>
+  onFileShelfUpdate: (callback: (files: MacIslandFileItem[]) => void) => () => void
+  openShelfFile: (id: string) => Promise<boolean>
+  removeShelfFile: (id: string) => Promise<MacIslandFileItem[]>
+  clearFileShelf: () => Promise<MacIslandFileItem[]>
   openSettings: () => Promise<void>
   getSettings: () => Promise<MacIslandSettings | null>
   setSettings: (patch: Partial<MacIslandSettings>) => Promise<MacIslandSettings | null>
@@ -21,6 +27,8 @@ interface MacIslandSettings {
   launchAtLogin: boolean
   musicEnabled: boolean
   batteryEnabled: boolean
+  fileEnabled: boolean
+  fileShelfSize: number
   clipboardEnabled: boolean
   clipboardHistorySize: number
   clipboardPaused: boolean
@@ -34,6 +42,15 @@ interface MacIslandClipboardItem {
   id: string
   text: string
   createdAt: string
+}
+
+interface MacIslandFileItem {
+  id: string
+  name: string
+  extension: string
+  size: number
+  addedAt: string
+  exists: boolean
 }
 
 interface MacIslandBatteryState {

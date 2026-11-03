@@ -10,6 +10,8 @@ const defaults: MacIslandSettings = {
   clipboardEnabled: false,
   clipboardHistorySize: 50,
   clipboardPaused: false,
+  fileEnabled: false,
+  fileShelfSize: 20,
   automaticExpansion: true,
   lowBatteryAlerts: true,
   animationsEnabled: true,
@@ -145,6 +147,35 @@ function Settings(): React.JSX.Element {
           onClick={() => void window.api.clearClipboardHistory()}
         >
           Clear clipboard history
+        </button>
+        <Toggle
+          label="File Island"
+          checked={settings.fileEnabled}
+          onChange={(fileEnabled) => update({ fileEnabled })}
+        />
+        <label className="settings-row">
+          <span>File shelf maximum</span>
+          <select
+            value={settings.fileShelfSize}
+            disabled={!settings.fileEnabled}
+            onChange={(event) =>
+              update({ fileShelfSize: Math.min(50, Number(event.target.value)) })
+            }
+          >
+            {[10, 20, 50].map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="settings-clear-button"
+          type="button"
+          disabled={!settings.fileEnabled}
+          onClick={() => void window.api.clearFileShelf()}
+        >
+          Clear file shelf
         </button>
       </section>
     </main>

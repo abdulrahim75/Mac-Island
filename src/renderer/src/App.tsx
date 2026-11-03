@@ -2,14 +2,16 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import { BatteryIsland } from './components/BatteryIsland'
 import { ClipboardIsland } from './components/ClipboardIsland'
+import { FileIsland } from './components/FileIsland'
 import { MusicPlayer } from './components/MusicPlayer'
 import { SoundBars } from './components/SoundBars'
 import type { MacIslandBatteryState } from './batteryTypes'
 import type { MacIslandSettings } from './settingsTypes'
 import type { MacIslandClipboardItem } from './clipboardTypes'
+import type { MacIslandFileItem } from './fileTypes'
 import './island.css'
 
-type ActiveIsland = 'music' | 'battery' | 'clipboard'
+type ActiveIsland = 'music' | 'battery' | 'clipboard' | 'file'
 
 const defaultSettings: MacIslandSettings = {
   launchAtLogin: false,
@@ -18,6 +20,8 @@ const defaultSettings: MacIslandSettings = {
   clipboardEnabled: false,
   clipboardHistorySize: 50,
   clipboardPaused: false,
+  fileEnabled: false,
+  fileShelfSize: 20,
   automaticExpansion: true,
   lowBatteryAlerts: true,
   animationsEnabled: true,
@@ -29,6 +33,7 @@ function App(): React.JSX.Element {
   const [playing, setPlaying] = useState(true)
   const [batteryState, setBatteryState] = useState<MacIslandBatteryState | null>(null)
   const [clipboardHistory, setClipboardHistory] = useState<MacIslandClipboardItem[]>([])
+  const [fileShelf, setFileShelf] = useState<MacIslandFileItem[]>([])
   const [activeIsland, setActiveIsland] = useState<ActiveIsland>('music')
   const [settings, setSettings] = useState(defaultSettings)
   const reduceMotion = useReducedMotion()
@@ -55,6 +60,7 @@ function App(): React.JSX.Element {
     })
 
     void window.api.getClipboardHistory().then(setClipboardHistory)
+    void window.api.getFileShelf().then(setFileShelf)
 
     return window.api.onBatteryUpdate((nextState) => {
       const previousState = previousBatteryState.current
@@ -99,10 +105,16 @@ function App(): React.JSX.Element {
       if (!nextSettings.clipboardEnabled && activeIsland === 'clipboard') {
         setActiveIsland(nextSettings.musicEnabled ? 'music' : 'battery')
       }
+      if (!nextSettings.fileEnabled && activeIsland === 'file') {
+        if (nextSettings.musicEnabled) setActiveIsland('music')
+        else if (nextSettings.batteryEnabled) setActiveIsland('battery')
+        else if (nextSettings.clipboardEnabled) setActiveIsland('clipboard')
+      }
     })
   }, [activeIsland])
 
   useEffect(() => window.api.onClipboardUpdate(setClipboardHistory), [])
+  useEffect(() => window.api.onFileShelfUpdate(setFileShelf), [])
 
   const toggleIsland = async (): Promise<void> => {
     const nextState = !expanded
@@ -115,13 +127,35 @@ function App(): React.JSX.Element {
     if (island === 'music' && !settings.musicEnabled) return
     if (island === 'battery' && !settings.batteryEnabled) return
     if (island === 'clipboard' && !settings.clipboardEnabled) return
+    if (island === 'file' && !settings.fileEnabled) return
     setActiveIsland(island)
+  }
+
+  const handleFileDrop = async (event: React.DragEvent<HTMLElement>): Promise<void> => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!settings.fileEnabled || event.dataTransfer.files.length === 0) return
+
+    const previousIds = new Set(fileShelf.map((file) => file.id))
+    const files = await window.api.addFilesToShelf(event.dataTransfer.files)
+    const added = files.some((file) => !previousIds.has(file.id))
+    setFileShelf(files)
+    if (added) setActiveIsland('file')
+    if (!expanded) {
+      setExpanded(true)
+      await window.api.setExpanded(true)
+    }
   }
 
   return (
     <main className="island-container">
       <motion.section
         className={`island ${expanded ? 'expanded' : ''} appearance-${settings.appearance}`}
+        onDragOver={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onDrop={(event) => void handleFileDrop(event)}
         animate={{
           minHeight: expanded ? 268 : 48,
           borderRadius: expanded ? 27 : 25
@@ -154,7 +188,7 @@ function App(): React.JSX.Element {
                   </>
                 ) : activeIsland === 'battery' ? (
                   <BatteryIsland state={batteryState} compact />
-                ) : (
+                ) : activeIsland === 'clipboard' ? (
                   <ClipboardIsland
                     history={clipboardHistory}
                     paused={settings.clipboardPaused}
@@ -163,6 +197,14 @@ function App(): React.JSX.Element {
                     onResume={() => undefined}
                     onCopy={() => undefined}
                     onDelete={() => undefined}
+                    onClear={() => undefined}
+                  />
+                ) : (
+                  <FileIsland
+                    files={fileShelf}
+                    compact
+                    onOpen={() => undefined}
+                    onRemove={() => undefined}
                     onClear={() => undefined}
                   />
                 )}
@@ -182,7 +224,7 @@ function App(): React.JSX.Element {
                   />
                 ) : activeIsland === 'battery' ? (
                   <BatteryIsland state={batteryState} />
-                ) : (
+                ) : activeIsland === 'clipboard' ? (
                   <ClipboardIsland
                     history={clipboardHistory}
                     paused={settings.clipboardPaused}
@@ -191,6 +233,13 @@ function App(): React.JSX.Element {
                     onCopy={(id) => void window.api.copyClipboardItem(id)}
                     onDelete={(id) => void window.api.deleteClipboardItem(id)}
                     onClear={() => void window.api.clearClipboardHistory()}
+                  />
+                ) : (
+                  <FileIsland
+                    files={fileShelf}
+                    onOpen={(id) => void window.api.openShelfFile(id)}
+                    onRemove={(id) => void window.api.removeShelfFile(id)}
+                    onClear={() => void window.api.clearFileShelf()}
                   />
                 )}
               </motion.div>
@@ -250,6 +299,19 @@ function App(): React.JSX.Element {
                   disabled={!batteryState || !settings.batteryEnabled}
                 >
                   Battery
+                </button>
+                <button
+                  type="button"
+                  className={activeIsland === 'file' ? 'active' : ''}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    selectIsland('file')
+                  }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  aria-pressed={activeIsland === 'file'}
+                  disabled={!settings.fileEnabled}
+                >
+                  File
                 </button>
                 <button
                   type="button"

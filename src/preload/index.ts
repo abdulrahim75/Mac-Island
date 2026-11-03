@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import { webUtils } from 'electron'
 
 interface MacIslandBatteryState {
   percentage: number
@@ -15,6 +16,8 @@ interface MacIslandSettings {
   clipboardEnabled: boolean
   clipboardHistorySize: number
   clipboardPaused: boolean
+  fileEnabled: boolean
+  fileShelfSize: number
   automaticExpansion: boolean
   lowBatteryAlerts: boolean
   animationsEnabled: boolean
@@ -25,6 +28,15 @@ interface MacIslandClipboardItem {
   id: string
   text: string
   createdAt: string
+}
+
+interface MacIslandFileItem {
+  id: string
+  name: string
+  extension: string
+  size: number
+  addedAt: string
+  exists: boolean
 }
 
 const api = {
@@ -47,6 +59,25 @@ const api = {
   copyClipboardItem: (id: string): Promise<void> => ipcRenderer.invoke('clipboard:copy', id),
   deleteClipboardItem: (id: string): Promise<void> => ipcRenderer.invoke('clipboard:delete', id),
   clearClipboardHistory: (): Promise<void> => ipcRenderer.invoke('clipboard:clear'),
+  addFilesToShelf: (files: FileList | File[]): Promise<MacIslandFileItem[]> => {
+    const paths = Array.from(files).map((file) => webUtils.getPathForFile(file))
+    return ipcRenderer.invoke('files:add-paths', paths)
+  },
+  getFileShelf: (): Promise<MacIslandFileItem[]> => ipcRenderer.invoke('files:get-shelf'),
+  onFileShelfUpdate: (callback: (files: MacIslandFileItem[]) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, files: MacIslandFileItem[]): void =>
+      callback(files)
+    ipcRenderer.on('files:update', listener)
+    ipcRenderer.send('files:subscribe')
+    return () => {
+      ipcRenderer.off('files:update', listener)
+      ipcRenderer.send('files:unsubscribe')
+    }
+  },
+  openShelfFile: (id: string): Promise<boolean> => ipcRenderer.invoke('files:open', id),
+  removeShelfFile: (id: string): Promise<MacIslandFileItem[]> =>
+    ipcRenderer.invoke('files:remove', id),
+  clearFileShelf: (): Promise<MacIslandFileItem[]> => ipcRenderer.invoke('files:clear'),
   openSettings: (): Promise<void> => ipcRenderer.invoke('settings:open'),
   getSettings: (): Promise<MacIslandSettings | null> => ipcRenderer.invoke('settings:get'),
   setSettings: (patch: Partial<MacIslandSettings>): Promise<MacIslandSettings | null> =>

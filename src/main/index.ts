@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { BatteryService, BatteryState } from './batteryService'
 import { MacIslandSettings, SettingsStore } from './settings'
 import { ClipboardItem, ClipboardService } from './services/clipboardService'
+import { FileService, ShelfFileView } from './services/fileService'
 
 let islandWindow: BrowserWindow | null = null
 const batterySubscribers = new Set<number>()
@@ -13,6 +14,8 @@ let settingsStore: SettingsStore | null = null
 let settingsWindow: BrowserWindow | null = null
 let clipboardService: ClipboardService | null = null
 const clipboardSubscribers = new Set<number>()
+let fileService: FileService | null = null
+const fileSubscribers = new Set<number>()
 
 const COLLAPSED = { width: 260, height: 48 }
 const EXPANDED = { width: 360, height: 280 }
@@ -77,6 +80,15 @@ function broadcastClipboardHistory(history: ClipboardItem[]): void {
       (window) => window.webContents.id === webContentsId && !window.webContents.isDestroyed()
     )
     subscriber?.webContents.send('clipboard:update', history)
+  }
+}
+
+function broadcastFileShelf(files: ShelfFileView[]): void {
+  for (const webContentsId of fileSubscribers) {
+    const subscriber = BrowserWindow.getAllWindows().find(
+      (window) => window.webContents.id === webContentsId && !window.webContents.isDestroyed()
+    )
+    subscriber?.webContents.send('files:update', files)
   }
 }
 
@@ -189,6 +201,7 @@ ipcMain.handle('settings:set', (_event, patch: Partial<MacIslandSettings>) => {
   const settings = settingsStore.update(patch)
   broadcastSettings(settings)
   reconcileClipboardService(settings)
+  fileService?.setMaxItems(settings.fileShelfSize)
   return settings
 })
 
@@ -247,6 +260,43 @@ ipcMain.on('clipboard:unsubscribe', (event) => {
   clipboardSubscribers.delete(event.sender.id)
 })
 
+ipcMain.handle('files:get-shelf', () => fileService?.getShelf() ?? [])
+
+ipcMain.handle('files:add-paths', (_event, paths: unknown) => {
+  if (!Array.isArray(paths) || !settingsStore?.get().fileEnabled) return fileService?.getShelf() ?? []
+  const validPaths = paths.filter((path): path is string => typeof path === 'string')
+  const files = fileService?.addPaths(validPaths) ?? []
+  broadcastFileShelf(files)
+  return files
+})
+
+ipcMain.handle('files:open', (_event, id: unknown) => {
+  return typeof id === 'string' && fileService?.open(id) ? true : false
+})
+
+ipcMain.handle('files:remove', (_event, id: unknown) => {
+  if (typeof id !== 'string') return fileService?.getShelf() ?? []
+  const files = fileService?.remove(id) ?? []
+  broadcastFileShelf(files)
+  return files
+})
+
+ipcMain.handle('files:clear', () => {
+  const files = fileService?.clear() ?? []
+  broadcastFileShelf(files)
+  return files
+})
+
+ipcMain.on('files:subscribe', (event) => {
+  fileSubscribers.add(event.sender.id)
+  event.sender.send('files:update', fileService?.getShelf() ?? [])
+  event.sender.once('destroyed', () => fileSubscribers.delete(event.sender.id))
+})
+
+ipcMain.on('files:unsubscribe', (event) => {
+  fileSubscribers.delete(event.sender.id)
+})
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.macisland.app')
 
@@ -260,6 +310,7 @@ app.whenReady().then(() => {
     broadcastClipboardHistory
   )
   reconcileClipboardService(settingsStore.get())
+  fileService = new FileService(settingsStore.get().fileShelfSize)
   createIslandWindow()
   batteryService = new BatteryService(handleBatteryUpdate)
   batteryService.start()
