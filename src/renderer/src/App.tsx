@@ -1,28 +1,51 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import { BatteryIsland } from './components/BatteryIsland'
+import { ClipboardIsland } from './components/ClipboardIsland'
 import { MusicPlayer } from './components/MusicPlayer'
 import { SoundBars } from './components/SoundBars'
 import type { MacIslandBatteryState } from './batteryTypes'
+import type { MacIslandSettings } from './settingsTypes'
+import type { MacIslandClipboardItem } from './clipboardTypes'
 import './island.css'
 
-type ActiveIsland = 'music' | 'battery'
+type ActiveIsland = 'music' | 'battery' | 'clipboard'
+
+const defaultSettings: MacIslandSettings = {
+  launchAtLogin: false,
+  musicEnabled: true,
+  batteryEnabled: true,
+  clipboardEnabled: false,
+  clipboardHistorySize: 50,
+  clipboardPaused: false,
+  automaticExpansion: true,
+  lowBatteryAlerts: true,
+  animationsEnabled: true,
+  appearance: 'system'
+}
 
 function App(): React.JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const [playing, setPlaying] = useState(true)
   const [batteryState, setBatteryState] = useState<MacIslandBatteryState | null>(null)
+  const [clipboardHistory, setClipboardHistory] = useState<MacIslandClipboardItem[]>([])
   const [activeIsland, setActiveIsland] = useState<ActiveIsland>('music')
+  const [settings, setSettings] = useState(defaultSettings)
   const reduceMotion = useReducedMotion()
   const previousBatteryState = useRef<MacIslandBatteryState | null>(null)
 
   useEffect(() => {
+    void window.api.getSettings().then((value) => {
+      if (value) setSettings(value)
+    })
+
     void window.api.getBatteryState().then((state) => {
       setBatteryState(state)
       previousBatteryState.current = state
 
       if (
         state &&
+        settings.batteryEnabled &&
         (state.percentage < 20 ||
           state.chargingState === 'charging' ||
           state.chargingState === 'full')
@@ -30,6 +53,8 @@ function App(): React.JSX.Element {
         setActiveIsland('battery')
       }
     })
+
+    void window.api.getClipboardHistory().then(setClipboardHistory)
 
     return window.api.onBatteryUpdate((nextState) => {
       const previousState = previousBatteryState.current
@@ -49,13 +74,35 @@ function App(): React.JSX.Element {
           (previousState.percentage < threshold && nextState.percentage >= threshold)
       )
 
-      if (adapterChanged || chargingChanged || crossedLowThreshold || crossedBatteryThreshold) {
+      if (
+        settings.batteryEnabled &&
+        settings.automaticExpansion &&
+        (adapterChanged || chargingChanged || crossedLowThreshold || crossedBatteryThreshold)
+      ) {
         setActiveIsland('battery')
         setExpanded(true)
         void window.api.setExpanded(true)
       }
     })
-  }, [])
+  }, [settings])
+
+  useEffect(() => {
+    return window.api.onSettingsUpdate((nextSettings) => {
+      setSettings(nextSettings)
+
+      if (!nextSettings.musicEnabled && activeIsland === 'music') {
+        setActiveIsland(nextSettings.batteryEnabled ? 'battery' : 'music')
+      }
+      if (!nextSettings.batteryEnabled && activeIsland === 'battery') {
+        setActiveIsland(nextSettings.musicEnabled ? 'music' : 'music')
+      }
+      if (!nextSettings.clipboardEnabled && activeIsland === 'clipboard') {
+        setActiveIsland(nextSettings.musicEnabled ? 'music' : 'battery')
+      }
+    })
+  }, [activeIsland])
+
+  useEffect(() => window.api.onClipboardUpdate(setClipboardHistory), [])
 
   const toggleIsland = async (): Promise<void> => {
     const nextState = !expanded
@@ -65,19 +112,22 @@ function App(): React.JSX.Element {
   }
 
   const selectIsland = (island: ActiveIsland): void => {
+    if (island === 'music' && !settings.musicEnabled) return
+    if (island === 'battery' && !settings.batteryEnabled) return
+    if (island === 'clipboard' && !settings.clipboardEnabled) return
     setActiveIsland(island)
   }
 
   return (
     <main className="island-container">
       <motion.section
-        className={`island ${expanded ? 'expanded' : ''}`}
+        className={`island ${expanded ? 'expanded' : ''} appearance-${settings.appearance}`}
         animate={{
-          minHeight: expanded ? 168 : 48,
+          minHeight: expanded ? 268 : 48,
           borderRadius: expanded ? 27 : 25
         }}
         transition={
-          reduceMotion
+          reduceMotion || !settings.animationsEnabled
             ? { duration: 0 }
             : { type: 'spring', stiffness: 320, damping: 28, mass: 0.8 }
         }
@@ -102,8 +152,19 @@ function App(): React.JSX.Element {
                     <span className="music-icon">♫</span>
                     <SoundBars playing={playing} />
                   </>
-                ) : (
+                ) : activeIsland === 'battery' ? (
                   <BatteryIsland state={batteryState} compact />
+                ) : (
+                  <ClipboardIsland
+                    history={clipboardHistory}
+                    paused={settings.clipboardPaused}
+                    compact
+                    onPause={() => undefined}
+                    onResume={() => undefined}
+                    onCopy={() => undefined}
+                    onDelete={() => undefined}
+                    onClear={() => undefined}
+                  />
                 )}
               </motion.div>
             ) : (
@@ -119,8 +180,18 @@ function App(): React.JSX.Element {
                     playing={playing}
                     onToggle={() => setPlaying((current) => !current)}
                   />
-                ) : (
+                ) : activeIsland === 'battery' ? (
                   <BatteryIsland state={batteryState} />
+                ) : (
+                  <ClipboardIsland
+                    history={clipboardHistory}
+                    paused={settings.clipboardPaused}
+                    onPause={() => void window.api.pauseClipboardMonitoring()}
+                    onResume={() => void window.api.resumeClipboardMonitoring()}
+                    onCopy={(id) => void window.api.copyClipboardItem(id)}
+                    onDelete={(id) => void window.api.deleteClipboardItem(id)}
+                    onClear={() => void window.api.clearClipboardHistory()}
+                  />
                 )}
               </motion.div>
             )}
@@ -143,6 +214,19 @@ function App(): React.JSX.Element {
               <div className="island-feature-switcher">
                 <button
                   type="button"
+                  className={activeIsland === 'clipboard' ? 'active' : ''}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    selectIsland('clipboard')
+                  }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  aria-pressed={activeIsland === 'clipboard'}
+                  disabled={!settings.clipboardEnabled}
+                >
+                  Clipboard
+                </button>
+                <button
+                  type="button"
                   className={activeIsland === 'music' ? 'active' : ''}
                   onClick={(event) => {
                     event.stopPropagation()
@@ -150,6 +234,7 @@ function App(): React.JSX.Element {
                   }}
                   onPointerDown={(event) => event.stopPropagation()}
                   aria-pressed={activeIsland === 'music'}
+                  disabled={!settings.musicEnabled}
                 >
                   Music
                 </button>
@@ -162,9 +247,21 @@ function App(): React.JSX.Element {
                   }}
                   onPointerDown={(event) => event.stopPropagation()}
                   aria-pressed={activeIsland === 'battery'}
-                  disabled={!batteryState}
+                  disabled={!batteryState || !settings.batteryEnabled}
                 >
                   Battery
+                </button>
+                <button
+                  type="button"
+                  className="settings-button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void window.api.openSettings()
+                  }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  aria-label="Open Settings"
+                >
+                  Settings
                 </button>
               </div>
             </motion.div>

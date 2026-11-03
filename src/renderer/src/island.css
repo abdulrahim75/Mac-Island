@@ -39,7 +39,7 @@ body {
 }
 
 .island.expanded {
-  min-height: 168px;
+  min-height: 268px;
   border-radius: 27px;
 }
 
@@ -199,6 +199,98 @@ body {
 .island-feature-switcher button:disabled {
   cursor: default;
   opacity: 0.35;
+}
+
+.clipboard-island-compact {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  padding: 0 20px;
+}
+
+.clipboard-island-compact strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipboard-island {
+  width: 100%;
+  padding: 0 12px;
+}
+
+.clipboard-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.clipboard-toolbar strong {
+  flex: 1;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipboard-toolbar button,
+.clipboard-item-actions button,
+.clipboard-clear {
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 8px;
+  color: white;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+}
+
+.clipboard-history {
+  max-height: 130px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.clipboard-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.clipboard-item-text {
+  flex: 1;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipboard-item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.clipboard-item-actions button {
+  font-size: 9px;
+}
+
+.clipboard-clear {
+  float: right;
+  margin-top: 6px;
+  font-size: 9px;
+}
+
+.island-feature-switcher .settings-button {
+  min-width: 0;
+  margin-left: 3px;
+  color: #bbb;
 }
 
 .battery-island {
