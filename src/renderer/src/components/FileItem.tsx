@@ -13,6 +13,11 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function formatAddedDate(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Unknown date' : date.toLocaleDateString()
+}
+
 export function FileItem({ item, onOpen, onRemove }: FileItemProps): React.JSX.Element {
   const reduceMotion = useReducedMotion()
 
@@ -35,7 +40,8 @@ export function FileItem({ item, onOpen, onRemove }: FileItemProps): React.JSX.E
       >
         <strong>{item.name}</strong>
         <span>
-          {item.extension ? item.extension.toUpperCase() : 'FILE'} · {formatSize(item.size)}
+          {item.extension ? item.extension.toUpperCase() : 'FILE'} · {formatSize(item.size)} ·{' '}
+          {formatAddedDate(item.addedAt)}
           {!item.exists && ' · unavailable'}
         </span>
       </button>

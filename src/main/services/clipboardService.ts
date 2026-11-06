@@ -82,7 +82,8 @@ export class ClipboardService {
   }
 
   setMaxItems(maxItems: number): void {
-    this.history = this.history.slice(0, Math.max(1, Math.min(50, maxItems)))
+    this.maxItems = Math.max(1, Math.min(50, maxItems))
+    this.history = this.history.slice(0, this.maxItems)
     this.persist()
   }
 

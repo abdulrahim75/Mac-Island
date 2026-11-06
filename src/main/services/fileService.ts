@@ -44,6 +44,7 @@ export class FileService {
   }
 
   addPaths(paths: string[]): ShelfFileView[] {
+    let accepted = 0
     for (const inputPath of paths) {
       if (typeof inputPath !== 'string' || !isAbsolute(inputPath)) continue
 
@@ -65,6 +66,7 @@ export class FileService {
           originalPath: safePath,
           exists: true
         })
+        accepted += 1
       } catch (error) {
         console.error('Unable to inspect a dropped file:', error)
       }
@@ -72,6 +74,7 @@ export class FileService {
 
     this.files = this.files.slice(0, this.maxItems)
     this.persist()
+    console.info(`File Island accepted ${accepted} file(s)`)
     return this.getShelf()
   }
 

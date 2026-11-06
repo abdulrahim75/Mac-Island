@@ -60,8 +60,23 @@ const api = {
   deleteClipboardItem: (id: string): Promise<void> => ipcRenderer.invoke('clipboard:delete', id),
   clearClipboardHistory: (): Promise<void> => ipcRenderer.invoke('clipboard:clear'),
   addFilesToShelf: (files: FileList | File[]): Promise<MacIslandFileItem[]> => {
-    const paths = Array.from(files).map((file) => webUtils.getPathForFile(file))
-    return ipcRenderer.invoke('files:add-paths', paths)
+    const paths = Array.from(files).flatMap((file) => {
+      try {
+        const path = webUtils.getPathForFile(file)
+        if (path) return [path]
+
+        const legacyPath = (file as File & { path?: string }).path
+        return legacyPath ? [legacyPath] : []
+      } catch {
+        console.error('Unable to resolve a dropped file path')
+        return []
+      }
+    })
+    console.info(`File drop supplied ${files.length} item(s); resolved ${paths.length} path(s)`)
+    return ipcRenderer.invoke('files:add-paths', {
+      paths,
+      droppedItemCount: files.length
+    })
   },
   getFileShelf: (): Promise<MacIslandFileItem[]> => ipcRenderer.invoke('files:get-shelf'),
   onFileShelfUpdate: (callback: (files: MacIslandFileItem[]) => void): (() => void) => {
@@ -112,8 +127,8 @@ if (process.contextIsolated) {
     console.error(error)
   }
 } else {
-  // @ts-ignore
+  // @ts-ignore ElectronAPI may not be declared after contextBridge fallback assignment.
   window.electron = electronAPI
-  // @ts-ignore
+  // @ts-ignore MacIsland API is declared in the preload declaration file.
   window.api = api
 }

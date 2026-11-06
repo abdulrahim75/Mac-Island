@@ -47,13 +47,27 @@ export function ClipboardIsland({
     >
       <div className="clipboard-toolbar">
         <strong>{latest?.text || 'Clipboard history is empty'}</strong>
-        <button type="button" onClick={paused ? onResume : onPause}>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            if (paused) onResume()
+            else onPause()
+          }}
+        >
           {paused ? 'Resume' : 'Pause'}
         </button>
       </div>
       <ClipboardHistory items={history.slice(0, 5)} onCopy={onCopy} onDelete={onDelete} />
       {history.length > 0 && (
-        <button className="clipboard-clear" type="button" onClick={onClear}>
+        <button
+          className="clipboard-clear"
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onClear()
+          }}
+        >
           Clear history
         </button>
       )}

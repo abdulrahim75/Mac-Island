@@ -20,10 +20,24 @@ export function ClipboardItem({ item, onCopy, onDelete }: ClipboardItemProps): R
     >
       <span className="clipboard-item-text">{item.text}</span>
       <div className="clipboard-item-actions">
-        <button type="button" onClick={() => onCopy(item.id)} aria-label="Copy again">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onCopy(item.id)
+          }}
+          aria-label="Copy again"
+        >
           Copy
         </button>
-        <button type="button" onClick={() => onDelete(item.id)} aria-label="Delete clipboard item">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onDelete(item.id)
+          }}
+          aria-label="Delete clipboard item"
+        >
           Delete
         </button>
       </div>

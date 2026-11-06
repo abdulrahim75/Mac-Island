@@ -11,7 +11,7 @@ import type { MacIslandClipboardItem } from './clipboardTypes'
 import type { MacIslandFileItem } from './fileTypes'
 import './island.css'
 
-type ActiveIsland = 'music' | 'battery' | 'clipboard' | 'file'
+type ActiveIsland = 'idle' | 'music' | 'battery' | 'clipboard' | 'file'
 
 const defaultSettings: MacIslandSettings = {
   launchAtLogin: false,
@@ -34,29 +34,34 @@ function App(): React.JSX.Element {
   const [batteryState, setBatteryState] = useState<MacIslandBatteryState | null>(null)
   const [clipboardHistory, setClipboardHistory] = useState<MacIslandClipboardItem[]>([])
   const [fileShelf, setFileShelf] = useState<MacIslandFileItem[]>([])
-  const [activeIsland, setActiveIsland] = useState<ActiveIsland>('music')
+  const [activeIsland, setActiveIsland] = useState<ActiveIsland>('idle')
   const [settings, setSettings] = useState(defaultSettings)
+  const [dragActive, setDragActive] = useState(false)
   const reduceMotion = useReducedMotion()
   const previousBatteryState = useRef<MacIslandBatteryState | null>(null)
+  const settingsRef = useRef(settings)
+  const activeIslandRef = useRef(activeIsland)
 
   useEffect(() => {
     void window.api.getSettings().then((value) => {
-      if (value) setSettings(value)
+      if (value) {
+        settingsRef.current = value
+        setSettings(value)
+        if (
+          activeIslandRef.current !== 'idle' &&
+          ((activeIslandRef.current === 'music' && !value.musicEnabled) ||
+            (activeIslandRef.current === 'battery' && !value.batteryEnabled) ||
+            (activeIslandRef.current === 'clipboard' && !value.clipboardEnabled) ||
+            (activeIslandRef.current === 'file' && !value.fileEnabled))
+        ) {
+          setActiveIsland('idle')
+        }
+      }
     })
 
     void window.api.getBatteryState().then((state) => {
       setBatteryState(state)
       previousBatteryState.current = state
-
-      if (
-        state &&
-        settings.batteryEnabled &&
-        (state.percentage < 20 ||
-          state.chargingState === 'charging' ||
-          state.chargingState === 'full')
-      ) {
-        setActiveIsland('battery')
-      }
     })
 
     void window.api.getClipboardHistory().then(setClipboardHistory)
@@ -81,8 +86,8 @@ function App(): React.JSX.Element {
       )
 
       if (
-        settings.batteryEnabled &&
-        settings.automaticExpansion &&
+        settingsRef.current.batteryEnabled &&
+        settingsRef.current.automaticExpansion &&
         (adapterChanged || chargingChanged || crossedLowThreshold || crossedBatteryThreshold)
       ) {
         setActiveIsland('battery')
@@ -90,31 +95,74 @@ function App(): React.JSX.Element {
         void window.api.setExpanded(true)
       }
     })
-  }, [settings])
+  }, [])
+
+  useEffect(() => {
+    activeIslandRef.current = activeIsland
+  }, [activeIsland])
 
   useEffect(() => {
     return window.api.onSettingsUpdate((nextSettings) => {
+      settingsRef.current = nextSettings
       setSettings(nextSettings)
 
-      if (!nextSettings.musicEnabled && activeIsland === 'music') {
-        setActiveIsland(nextSettings.batteryEnabled ? 'battery' : 'music')
-      }
-      if (!nextSettings.batteryEnabled && activeIsland === 'battery') {
-        setActiveIsland(nextSettings.musicEnabled ? 'music' : 'music')
-      }
-      if (!nextSettings.clipboardEnabled && activeIsland === 'clipboard') {
-        setActiveIsland(nextSettings.musicEnabled ? 'music' : 'battery')
-      }
-      if (!nextSettings.fileEnabled && activeIsland === 'file') {
-        if (nextSettings.musicEnabled) setActiveIsland('music')
-        else if (nextSettings.batteryEnabled) setActiveIsland('battery')
-        else if (nextSettings.clipboardEnabled) setActiveIsland('clipboard')
+      if (
+        (activeIslandRef.current === 'music' && !nextSettings.musicEnabled) ||
+        (activeIslandRef.current === 'battery' && !nextSettings.batteryEnabled) ||
+        (activeIslandRef.current === 'clipboard' && !nextSettings.clipboardEnabled) ||
+        (activeIslandRef.current === 'file' && !nextSettings.fileEnabled)
+      ) {
+        setActiveIsland('idle')
       }
     })
-  }, [activeIsland])
+  }, [])
 
   useEffect(() => window.api.onClipboardUpdate(setClipboardHistory), [])
   useEffect(() => window.api.onFileShelfUpdate(setFileShelf), [])
+
+  useEffect(() => {
+    const handleDragOver = (event: DragEvent): void => {
+      event.preventDefault()
+    }
+
+    document.addEventListener('dragover', handleDragOver, true)
+
+    return () => {
+      document.removeEventListener('dragover', handleDragOver, true)
+    }
+  }, [])
+
+  const handleFileDrop = (event: React.DragEvent<HTMLElement>): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    setDragActive(false)
+
+    if (!settingsRef.current.fileEnabled) return
+
+    const files = Array.from(event.dataTransfer.files)
+    if (files.length === 0) {
+      files.push(
+        ...Array.from(event.dataTransfer.items)
+          .filter((item) => item.kind === 'file')
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => file !== null)
+      )
+    }
+
+    if (files.length === 0) return
+
+    void window.api
+      .addFilesToShelf(files)
+      .then((files) => {
+        setFileShelf(files)
+        setActiveIsland('file')
+        setExpanded(true)
+        void window.api.setExpanded(true)
+      })
+      .catch(() => {
+        console.error('Unable to add dropped files to the File Island shelf')
+      })
+  }
 
   const toggleIsland = async (): Promise<void> => {
     const nextState = !expanded
@@ -131,34 +179,43 @@ function App(): React.JSX.Element {
     setActiveIsland(island)
   }
 
-  const handleFileDrop = async (event: React.DragEvent<HTMLElement>): Promise<void> => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (!settings.fileEnabled || event.dataTransfer.files.length === 0) return
-
-    const previousIds = new Set(fileShelf.map((file) => file.id))
-    const files = await window.api.addFilesToShelf(event.dataTransfer.files)
-    const added = files.some((file) => !previousIds.has(file.id))
-    setFileShelf(files)
-    if (added) setActiveIsland('file')
-    if (!expanded) {
-      setExpanded(true)
-      await window.api.setExpanded(true)
-    }
-  }
-
   return (
     <main className="island-container">
       <motion.section
-        className={`island ${expanded ? 'expanded' : ''} appearance-${settings.appearance}`}
+        className={`island ${expanded ? 'expanded' : 'compact-notch'} ${
+          dragActive ? 'is-dragging-file' : ''
+        } appearance-${settings.appearance}`}
+        style={
+          expanded
+            ? undefined
+            : {
+                clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 2px), calc(100% - 2px) 100%, 2px 100%, 0 calc(100% - 2px))'
+              }
+        }
+        onDragEnter={(event) => {
+          event.preventDefault()
+          if (settingsRef.current.fileEnabled && event.dataTransfer.types.includes('Files')) {
+            setDragActive(true)
+          }
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault()
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setDragActive(false)
+          }
+        }}
         onDragOver={(event) => {
           event.preventDefault()
           event.stopPropagation()
+          if (settingsRef.current.fileEnabled) {
+            event.dataTransfer.dropEffect = 'copy'
+          } else {
+            event.dataTransfer.dropEffect = 'none'
+          }
         }}
-        onDrop={(event) => void handleFileDrop(event)}
+        onDrop={handleFileDrop}
         animate={{
-          minHeight: expanded ? 268 : 48,
-          borderRadius: expanded ? 27 : 25
+          minHeight: expanded ? 268 : 32
         }}
         transition={
           reduceMotion || !settings.animationsEnabled
@@ -166,6 +223,16 @@ function App(): React.JSX.Element {
             : { type: 'spring', stiffness: 320, damping: 28, mass: 0.8 }
         }
       >
+        {!expanded && (
+          <svg
+            className="compact-notch-surface"
+            viewBox="0 0 180 32"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path d="M 0 0 H 180 V 30 Q 180 32 178 32 H 2 Q 0 32 0 30 Z" />
+          </svg>
+        )}
         <div className="island-header" onClick={toggleIsland}>
           <div className="island-camera">
             <span className="camera-dot" />
@@ -181,7 +248,7 @@ function App(): React.JSX.Element {
                 exit={{ opacity: 0, scale: 0.94 }}
                 transition={{ duration: reduceMotion ? 0 : 0.16 }}
               >
-                {activeIsland === 'music' ? (
+                {activeIsland === 'idle' ? null : activeIsland === 'music' ? (
                   <>
                     <span className="music-icon">♫</span>
                     <SoundBars playing={playing} />
@@ -217,7 +284,7 @@ function App(): React.JSX.Element {
                 exit={{ opacity: 0 }}
                 transition={{ duration: reduceMotion ? 0 : 0.14 }}
               >
-                {activeIsland === 'music' ? (
+                {activeIsland === 'idle' ? null : activeIsland === 'music' ? (
                   <MusicPlayer
                     playing={playing}
                     onToggle={() => setPlaying((current) => !current)}
@@ -318,6 +385,8 @@ function App(): React.JSX.Element {
                   className="settings-button"
                   onClick={(event) => {
                     event.stopPropagation()
+                    setExpanded(false)
+                    void window.api.setExpanded(false)
                     void window.api.openSettings()
                   }}
                   onPointerDown={(event) => event.stopPropagation()}

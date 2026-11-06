@@ -16,19 +16,30 @@ let clipboardService: ClipboardService | null = null
 const clipboardSubscribers = new Set<number>()
 let fileService: FileService | null = null
 const fileSubscribers = new Set<number>()
+const batterySubscriptionLifecycle = new WeakSet<Electron.WebContents>()
+const clipboardSubscriptionLifecycle = new WeakSet<Electron.WebContents>()
+const fileSubscriptionLifecycle = new WeakSet<Electron.WebContents>()
 
-const COLLAPSED = { width: 260, height: 48 }
+const COLLAPSED = { width: 180, height: 32 }
 const EXPANDED = { width: 360, height: 280 }
-
-function getIslandBounds(expanded: boolean) {
+function getIslandBounds(expanded: boolean): {
+  x: number
+  y: number
+  width: number
+  height: number
+} {
   const display = screen.getPrimaryDisplay()
-  const { x: screenX, y: screenY, width: screenWidth } = display.bounds
+  const { x: screenX, width: screenWidth } = display.bounds
 
   const { width, height } = expanded ? EXPANDED : COLLAPSED
+  const y = display.bounds.y - 0
+  console.info(
+    `MacIsland display bounds: y=${display.bounds.y}, menu-bar inset=${Math.max(0, display.workArea.y - display.bounds.y)}`
+  )
 
   return {
     x: Math.round(screenX + (screenWidth - width) / 2),
-    y: screenY,
+    y,
     width,
     height
   }
@@ -154,6 +165,10 @@ function createIslandWindow(): void {
     alwaysOnTop: true,
     skipTaskbar: true,
     autoHideMenuBar: true,
+    acceptFirstMouse: true,
+    type: 'panel',
+    focusable: false,
+    enableLargerThanScreen: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -162,7 +177,9 @@ function createIslandWindow(): void {
     }
   })
 
-  islandWindow.setAlwaysOnTop(true, 'floating')
+  islandWindow.setAlwaysOnTop(true, 'screen-saver')
+  islandWindow.setBounds(getIslandBounds(false), false)
+  islandWindow.setIgnoreMouseEvents(false)
   islandWindow.setVisibleOnAllWorkspaces(true, {
     visibleOnFullScreen: true
   })
@@ -216,9 +233,12 @@ ipcMain.on('battery:subscribe', (event) => {
   const state = batteryService?.getState()
   if (state) event.sender.send('battery:update', state)
 
-  event.sender.once('destroyed', () => {
-    batterySubscribers.delete(event.sender.id)
-  })
+  if (!batterySubscriptionLifecycle.has(event.sender)) {
+    batterySubscriptionLifecycle.add(event.sender)
+    event.sender.once('destroyed', () => {
+      batterySubscribers.delete(event.sender.id)
+    })
+  }
 })
 
 ipcMain.on('battery:unsubscribe', (event) => {
@@ -229,13 +249,19 @@ ipcMain.handle('clipboard:get-history', () => clipboardService?.getHistory() ?? 
 
 ipcMain.handle('clipboard:pause', () => {
   clipboardService?.setPaused(true)
-  settingsStore?.update({ clipboardPaused: true })
+  const settings = settingsStore?.update({ clipboardPaused: true })
+  if (settings) {
+    broadcastSettings(settings)
+    reconcileClipboardService(settings)
+  }
 })
 
 ipcMain.handle('clipboard:resume', () => {
+  if (!settingsStore?.get().clipboardEnabled) return
   clipboardService?.setPaused(false)
-  settingsStore?.update({ clipboardPaused: false })
-  clipboardService?.start()
+  const settings = settingsStore.update({ clipboardPaused: false })
+  broadcastSettings(settings)
+  reconcileClipboardService(settings)
 })
 
 ipcMain.handle('clipboard:copy', (_event, id: string) => {
@@ -251,9 +277,12 @@ ipcMain.handle('clipboard:clear', () => clipboardService?.clear())
 ipcMain.on('clipboard:subscribe', (event) => {
   clipboardSubscribers.add(event.sender.id)
   event.sender.send('clipboard:update', clipboardService?.getHistory() ?? [])
-  event.sender.once('destroyed', () => {
-    clipboardSubscribers.delete(event.sender.id)
-  })
+  if (!clipboardSubscriptionLifecycle.has(event.sender)) {
+    clipboardSubscriptionLifecycle.add(event.sender)
+    event.sender.once('destroyed', () => {
+      clipboardSubscribers.delete(event.sender.id)
+    })
+  }
 })
 
 ipcMain.on('clipboard:unsubscribe', (event) => {
@@ -262,9 +291,24 @@ ipcMain.on('clipboard:unsubscribe', (event) => {
 
 ipcMain.handle('files:get-shelf', () => fileService?.getShelf() ?? [])
 
-ipcMain.handle('files:add-paths', (_event, paths: unknown) => {
-  if (!Array.isArray(paths) || !settingsStore?.get().fileEnabled) return fileService?.getShelf() ?? []
+ipcMain.handle('files:add-paths', (_event, payload: unknown) => {
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    !Array.isArray((payload as { paths?: unknown }).paths) ||
+    !settingsStore?.get().fileEnabled
+  )
+    return fileService?.getShelf() ?? []
+
+  const { paths, droppedItemCount } = payload as {
+    paths: unknown[]
+    droppedItemCount?: unknown
+  }
   const validPaths = paths.filter((path): path is string => typeof path === 'string')
+  const itemCount = typeof droppedItemCount === 'number' ? droppedItemCount : validPaths.length
+  console.info(
+    `File Island received ${validPaths.length} dropped path(s) from ${itemCount} dropped item(s)`
+  )
   const files = fileService?.addPaths(validPaths) ?? []
   broadcastFileShelf(files)
   return files
@@ -290,7 +334,10 @@ ipcMain.handle('files:clear', () => {
 ipcMain.on('files:subscribe', (event) => {
   fileSubscribers.add(event.sender.id)
   event.sender.send('files:update', fileService?.getShelf() ?? [])
-  event.sender.once('destroyed', () => fileSubscribers.delete(event.sender.id))
+  if (!fileSubscriptionLifecycle.has(event.sender)) {
+    fileSubscriptionLifecycle.add(event.sender)
+    event.sender.once('destroyed', () => fileSubscribers.delete(event.sender.id))
+  }
 })
 
 ipcMain.on('files:unsubscribe', (event) => {
@@ -319,6 +366,7 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createIslandWindow()
     }
+    batteryService?.start()
   })
 })
 

@@ -25,10 +25,10 @@ body {
 
 .island {
   width: 100%;
-  min-height: 48px;
-  padding: 5px;
+  min-height: 32px;
+  padding: 0;
   background: #000;
-  border-radius: 25px;
+  border-radius: 0 0 2px 2px;
   color: white;
   overflow: hidden;
   display: flex;
@@ -43,8 +43,40 @@ body {
   border-radius: 27px;
 }
 
+.island.compact-notch {
+  position: relative;
+  background: transparent;
+  box-shadow: none;
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+  border-bottom-left-radius: 2px !important;
+  border-bottom-right-radius: 2px !important;
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - 2px),
+    calc(100% - 2px) 100%,
+    2px 100%,
+    0 calc(100% - 2px)
+  );
+}
+
+.compact-notch-surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 32px;
+  fill: #000;
+  pointer-events: none;
+}
+
+.compact-notch .island-header {
+  position: relative;
+  z-index: 1;
+}
+
 .island-header {
-  min-height: 38px;
+  min-height: 32px;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -57,17 +89,16 @@ body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  width: 55px;
-  height: 30px;
-  background: #000;
-  border-radius: 20px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
 }
 
 .camera-dot {
-  width: 7px;
-  height: 7px;
+  width: 5px;
+  height: 5px;
   background: #151b2b;
   border-radius: 50%;
   box-shadow: inset 0 0 3px #45618d;
@@ -466,6 +497,12 @@ body {
   color: #777;
   font-size: 10px;
   text-align: center;
+}
+
+.island.is-dragging-file {
+  box-shadow:
+    0 0 0 2px rgba(102, 230, 161, 0.9),
+    0 4px 18px rgba(0, 0, 0, 0.28);
 }
 
 .file-island-compact {

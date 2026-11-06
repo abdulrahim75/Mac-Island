@@ -23,7 +23,9 @@ export function FileIsland({
     return (
       <motion.div className="file-island-compact" animate={{ opacity: 1 }}>
         <span>▱</span>
-        <strong>{files.length} {files.length === 1 ? 'file' : 'files'}</strong>
+        <strong>
+          {files.length} {files.length === 1 ? 'file' : 'files'}
+        </strong>
       </motion.div>
     )
   }
@@ -35,7 +37,9 @@ export function FileIsland({
       animate={{ opacity: 1, y: 0 }}
     >
       <div className="file-island-header">
-        <strong>{files.length} {files.length === 1 ? 'file' : 'files'}</strong>
+        <strong>
+          {files.length} {files.length === 1 ? 'file' : 'files'}
+        </strong>
         <button
           type="button"
           disabled={files.length === 0}
