@@ -215,7 +215,7 @@ function App(): React.JSX.Element {
         }}
         onDrop={handleFileDrop}
         animate={{
-          minHeight: expanded ? 268 : 32
+          minHeight: expanded ? 268 : 30
         }}
         transition={
           reduceMotion || !settings.animationsEnabled
@@ -226,11 +226,11 @@ function App(): React.JSX.Element {
         {!expanded && (
           <svg
             className="compact-notch-surface"
-            viewBox="0 0 180 32"
+            viewBox="0 0 170 30"
             preserveAspectRatio="none"
             aria-hidden="true"
           >
-            <path d="M 0 0 H 180 V 30 Q 180 32 178 32 H 2 Q 0 32 0 30 Z" />
+            <path d="M 0 0 H 170 V 28 Q 170 30 168 30 H 2 Q 0 30 0 28 Z" />
           </svg>
         )}
         <div className="island-header" onClick={toggleIsland}>

@@ -20,7 +20,7 @@ const batterySubscriptionLifecycle = new WeakSet<Electron.WebContents>()
 const clipboardSubscriptionLifecycle = new WeakSet<Electron.WebContents>()
 const fileSubscriptionLifecycle = new WeakSet<Electron.WebContents>()
 
-const COLLAPSED = { width: 180, height: 32 }
+const COLLAPSED = { width: 170, height: 30 }
 const EXPANDED = { width: 360, height: 280 }
 function getIslandBounds(expanded: boolean): {
   x: number
@@ -155,6 +155,7 @@ function createIslandWindow(): void {
     show: false,
     frame: false,
     transparent: true,
+    roundedCorners: false,
     backgroundColor: '#00000000',
     resizable: false,
     movable: false,
